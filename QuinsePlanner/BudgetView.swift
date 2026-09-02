@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import Charts
 
 // One line item in the budget — a category like "Venue" or "Dress" with how
 // much was planned for it and how much has actually been spent so far.
@@ -169,7 +170,7 @@ struct BudgetView: View {
     }
 
     private var summaryCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Total Budget")
                     .font(.subheadline.weight(.medium))
@@ -182,23 +183,15 @@ struct BudgetView: View {
                     .foregroundStyle(.white)
             }
 
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.25))
-                    Capsule()
-                        .fill(isOverBudget ? Color.red : Color.white)
-                        .frame(width: geo.size.width * spentFraction)
-                        .animation(.spring, value: spentFraction)
-                }
-            }
-            .frame(height: 10)
+            HStack(alignment: .center, spacing: 20) {
+                spendDonut
+                    .frame(width: 92, height: 92)
 
-            HStack {
-                summaryStat(title: "Planned", amount: totalPlanned)
-                Spacer()
-                summaryStat(title: "Spent", amount: totalSpent)
-                Spacer()
-                summaryStat(title: "Remaining", amount: totalBudget - totalSpent)
+                VStack(alignment: .leading, spacing: 10) {
+                    summaryStat(title: "Planned", amount: totalPlanned)
+                    summaryStat(title: "Spent", amount: totalSpent)
+                    summaryStat(title: "Remaining", amount: totalBudget - totalSpent)
+                }
             }
         }
         .padding(20)
@@ -207,6 +200,41 @@ struct BudgetView: View {
         )
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .shadow(color: .quinceMagenta.opacity(0.35), radius: 10, y: 5)
+    }
+
+    // A donut chart standing in for the old linear progress bar — same
+    // spent-vs-remaining story, laid out as two sectors around a ring with
+    // the percentage spent in the middle.
+    private var spendDonut: some View {
+        ZStack {
+            Chart {
+                SectorMark(
+                    angle: .value("Spent", NSDecimalNumber(decimal: totalSpent).doubleValue),
+                    innerRadius: .ratio(0.7),
+                    angularInset: 1.5
+                )
+                .foregroundStyle(isOverBudget ? Color.red : Color.white)
+                .cornerRadius(3)
+
+                SectorMark(
+                    angle: .value("Remaining", max(0, NSDecimalNumber(decimal: totalBudget - totalSpent).doubleValue)),
+                    innerRadius: .ratio(0.7),
+                    angularInset: 1.5
+                )
+                .foregroundStyle(.white.opacity(0.25))
+                .cornerRadius(3)
+            }
+            .chartLegend(.hidden)
+            .animation(.spring, value: spentFraction)
+
+            Text(spentPercentageLabel)
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+        }
+    }
+
+    private var spentPercentageLabel: String {
+        "\(Int((spentFraction * 100).rounded()))%"
     }
 
     private func summaryStat(title: LocalizedStringKey, amount: Decimal) -> some View {
