@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct QuinsePlannerApp: App {
@@ -13,5 +14,6 @@ struct QuinsePlannerApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: BudgetCategory.self)
     }
 }
