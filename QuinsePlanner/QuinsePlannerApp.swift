@@ -14,7 +14,7 @@ struct QuinsePlannerApp: App {
         WindowGroup {
             RootView()
         }
-        .modelContainer(for: [BudgetCategory.self, BudgetExpense.self, ChecklistItem.self, ChecklistNote.self])
+        .modelContainer(for: [BudgetCategory.self, BudgetExpense.self, ChecklistItem.self, ChecklistNote.self, Guest.self])
     }
 }
 

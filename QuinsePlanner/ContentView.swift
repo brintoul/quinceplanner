@@ -475,8 +475,8 @@ private struct InquireSheet: View {
 // MARK: - Placeholder sections
 
 // A themed "coming soon" screen, reused by every section we haven't built
-// out yet. When we're ready to build, say, the real Guest List, we'll
-// replace GuestListView's body with real content — MenuCard on the home
+// out yet. When we're ready to build, say, the real Vendors section, we'll
+// replace VendorsView's body with real content — MenuCard on the home
 // screen won't need to change at all.
 private struct ComingSoonView: View {
     let title: String
@@ -512,12 +512,6 @@ private struct ComingSoonView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-struct GuestListView: View {
-    var body: some View {
-        ComingSoonView(title: "Guest List", icon: "person.3.fill", color: .quincePink)
     }
 }
 
