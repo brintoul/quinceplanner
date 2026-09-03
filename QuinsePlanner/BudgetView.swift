@@ -566,11 +566,6 @@ private struct BudgetCategorySheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Category") {
-                    TextField("Name", text: $name)
-                    iconPicker
-                    colorPicker
-                }
                 Section("Amount") {
                     HStack {
                         Text("Planned")
@@ -579,6 +574,11 @@ private struct BudgetCategorySheet: View {
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
                     }
+                }
+                Section("Category") {
+                    TextField("Name", text: $name)
+                    iconPicker
+                    colorPicker
                 }
             }
             .navigationTitle(category == nil ? "Add Category" : "Edit Category")
