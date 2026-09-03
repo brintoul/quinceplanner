@@ -6,9 +6,11 @@
 import SwiftUI
 import SwiftData
 import Charts
+import PhotosUI
+import UIKit
 
-// One line item in the budget — a category like "Venue" or "Dress" with how
-// much was planned for it and how much has actually been spent so far.
+// One line item in the budget — a category like "Venue" or "Dress" with a
+// planned amount and a list of the individual expenses charged against it.
 // Unlike the fixed ProductCategory enum in the Boutique, budget categories
 // are fully user-editable since every family's budget breaks down
 // differently. This is a SwiftData model so categories survive app restarts.
@@ -21,30 +23,63 @@ final class BudgetCategory {
     // SwiftData can persist directly — `color` below maps it back.
     var colorName: String
     var plannedAmount: Decimal
-    var actualAmount: Decimal
 
-    init(id: UUID = UUID(), name: String, icon: String, colorName: String, plannedAmount: Decimal, actualAmount: Decimal) {
+    // Cascade so deleting a category takes its expenses (and any receipt
+    // photos attached to them) with it.
+    @Relationship(deleteRule: .cascade, inverse: \BudgetExpense.category)
+    var expenses: [BudgetExpense] = []
+
+    init(id: UUID = UUID(), name: String, icon: String, colorName: String, plannedAmount: Decimal) {
         self.id = id
         self.name = name
         self.icon = icon
         self.colorName = colorName
         self.plannedAmount = plannedAmount
-        self.actualAmount = actualAmount
     }
 
     var color: Color {
         budgetCategoryColorOptions.first { $0.name == colorName }?.color ?? .quinceMagenta
     }
 
+    // Spend is derived from actual expenses rather than typed in manually,
+    // so it can never drift from what's actually been logged.
+    var totalSpent: Decimal {
+        expenses.reduce(0) { $0 + $1.amount }
+    }
+
     // A few starter categories so the screen isn't empty on first launch —
     // inserted once if the store is empty, then the user can rename, delete,
-    // or add to them freely.
-    static let sampleSeed: [(name: String, icon: String, colorName: String, planned: Decimal, actual: Decimal)] = [
-        ("Venue", "building.2.fill", "magenta", 4500, 2000),
-        ("Dress", "tshirt.fill", "pink", 600, 600),
-        ("Catering", "fork.knife", "gold", 3000, 0),
-        ("Photography", "camera.fill", "magenta", 1200, 500),
+    // or add to them freely. A couple come with one starter expense so the
+    // demo shows a mix of spent and unspent categories.
+    static let sampleSeed: [(name: String, icon: String, colorName: String, planned: Decimal, starterExpense: (note: String, amount: Decimal)?)] = [
+        ("Venue", "building.2.fill", "magenta", 4500, ("Deposit", 2000)),
+        ("Dress", "tshirt.fill", "pink", 600, ("Full payment", 600)),
+        ("Catering", "fork.knife", "gold", 3000, nil),
+        ("Photography", "camera.fill", "magenta", 1200, ("Booking deposit", 500)),
     ]
+}
+
+// A single payment charged against a category — the thing a receipt photo
+// actually belongs to (a category like "Catering" might have a deposit and
+// a final payment, each with its own receipt).
+@Model
+final class BudgetExpense {
+    var id: UUID
+    var note: String
+    var amount: Decimal
+    var date: Date
+    // externalStorage keeps large photo data out of the main SQLite row.
+    @Attribute(.externalStorage) var receiptImageData: Data?
+    var category: BudgetCategory?
+
+    init(id: UUID = UUID(), note: String, amount: Decimal, date: Date = .now, receiptImageData: Data? = nil, category: BudgetCategory? = nil) {
+        self.id = id
+        self.note = note
+        self.amount = amount
+        self.date = date
+        self.receiptImageData = receiptImageData
+        self.category = category
+    }
 }
 
 // A small set of icons/colors to choose from when adding or editing a
@@ -59,6 +94,18 @@ private let budgetCategoryColorOptions: [(name: String, color: Color)] = [
     ("magenta", .quinceMagenta), ("pink", .quincePink), ("gold", .quinceGold),
 ]
 
+// Receipt photos are downscaled before being persisted so we're not storing
+// multi-megabyte camera originals for what only needs to be legible later.
+private func downscaledJPEGData(from data: Data, maxDimension: CGFloat = 1600, quality: CGFloat = 0.8) -> Data? {
+    guard let image = UIImage(data: data) else { return nil }
+    let scale = min(1, maxDimension / max(image.size.width, image.size.height))
+    guard scale < 1 else { return image.jpegData(compressionQuality: quality) }
+    let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+    let renderer = UIGraphicsImageRenderer(size: newSize)
+    let resized = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
+    return resized.jpegData(compressionQuality: quality)
+}
+
 struct BudgetView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \BudgetCategory.name) private var categories: [BudgetCategory]
@@ -69,7 +116,6 @@ struct BudgetView: View {
     @AppStorage("budgetTotalAmount") private var totalBudgetValue: Double = 15000
 
     @State private var showingAddSheet = false
-    @State private var editingCategory: BudgetCategory?
 
     private var totalBudget: Decimal { Decimal(totalBudgetValue) }
 
@@ -85,7 +131,7 @@ struct BudgetView: View {
     }
 
     private var totalSpent: Decimal {
-        categories.reduce(0) { $0 + $1.actualAmount }
+        categories.reduce(0) { $0 + $1.totalSpent }
     }
 
     private var spentFraction: CGFloat {
@@ -111,12 +157,19 @@ struct BudgetView: View {
                 VStack(spacing: 16) {
                     summaryCard
                     ForEach(categories) { category in
-                        Button {
-                            editingCategory = category
+                        NavigationLink {
+                            BudgetCategoryDetailView(category: category)
                         } label: {
                             BudgetCategoryRow(category: category)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                modelContext.delete(category)
+                            } label: {
+                                Label("Delete Category", systemImage: "trash")
+                            }
+                        }
                     }
                 }
                 .padding()
@@ -137,35 +190,24 @@ struct BudgetView: View {
             seedIfNeeded()
         }
         .sheet(isPresented: $showingAddSheet) {
-            BudgetCategorySheet(category: nil, onSave: { name, icon, colorName, planned, actual in
+            BudgetCategorySheet(category: nil, onSave: { name, icon, colorName, planned in
                 modelContext.insert(
-                    BudgetCategory(name: name, icon: icon, colorName: colorName, plannedAmount: planned, actualAmount: actual)
+                    BudgetCategory(name: name, icon: icon, colorName: colorName, plannedAmount: planned)
                 )
             })
-        }
-        .sheet(item: $editingCategory) { category in
-            BudgetCategorySheet(
-                category: category,
-                onSave: { name, icon, colorName, planned, actual in
-                    category.name = name
-                    category.icon = icon
-                    category.colorName = colorName
-                    category.plannedAmount = planned
-                    category.actualAmount = actual
-                },
-                onDelete: {
-                    modelContext.delete(category)
-                }
-            )
         }
     }
 
     private func seedIfNeeded() {
         guard categories.isEmpty else { return }
         for seed in BudgetCategory.sampleSeed {
-            modelContext.insert(
-                BudgetCategory(name: seed.name, icon: seed.icon, colorName: seed.colorName, plannedAmount: seed.planned, actualAmount: seed.actual)
-            )
+            let category = BudgetCategory(name: seed.name, icon: seed.icon, colorName: seed.colorName, plannedAmount: seed.planned)
+            modelContext.insert(category)
+            if let starterExpense = seed.starterExpense {
+                modelContext.insert(
+                    BudgetExpense(note: starterExpense.note, amount: starterExpense.amount, category: category)
+                )
+            }
         }
     }
 
@@ -256,12 +298,12 @@ private struct BudgetCategoryRow: View {
 
     private var progressFraction: CGFloat {
         guard category.plannedAmount > 0 else { return 0 }
-        let fraction = NSDecimalNumber(decimal: category.actualAmount / category.plannedAmount).doubleValue
+        let fraction = NSDecimalNumber(decimal: category.totalSpent / category.plannedAmount).doubleValue
         return CGFloat(min(max(fraction, 0), 1))
     }
 
     private var isOverPlanned: Bool {
-        category.actualAmount > category.plannedAmount
+        category.totalSpent > category.plannedAmount
     }
 
     var body: some View {
@@ -283,7 +325,7 @@ private struct BudgetCategoryRow: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(category.actualAmount, format: .currency(code: "USD"))
+                    Text(category.totalSpent, format: .currency(code: "USD"))
                         .font(.subheadline.bold())
                         .foregroundStyle(isOverPlanned ? .red : .primary)
                     Text("of \(category.plannedAmount, format: .currency(code: "USD"))")
@@ -309,36 +351,212 @@ private struct BudgetCategoryRow: View {
     }
 }
 
+// A category's own screen: its planned/spent/remaining totals up top, and
+// the list of individual expenses (each optionally carrying a receipt
+// photo) that make up its spend below.
+private struct BudgetCategoryDetailView: View {
+    let category: BudgetCategory
+
+    @Environment(\.modelContext) private var modelContext
+    @State private var showingEditSheet = false
+    @State private var showingAddExpenseSheet = false
+    @State private var editingExpense: BudgetExpense?
+
+    private var sortedExpenses: [BudgetExpense] {
+        category.expenses.sorted { $0.date > $1.date }
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [category.color.opacity(0.25), Color.quinceGold.opacity(0.15)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            List {
+                Section {
+                    categorySummary
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                }
+
+                Section("Expenses") {
+                    if sortedExpenses.isEmpty {
+                        Text("No expenses yet.")
+                            .foregroundStyle(.secondary)
+                            .listRowBackground(Color.white.opacity(0.7))
+                    } else {
+                        ForEach(sortedExpenses) { expense in
+                            Button {
+                                editingExpense = expense
+                            } label: {
+                                BudgetExpenseRow(expense: expense)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowBackground(Color.white.opacity(0.7))
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    modelContext.delete(expense)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollContentBackground(.hidden)
+        }
+        .navigationTitle(category.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        showingEditSheet = true
+                    } label: {
+                        Label("Edit Category", systemImage: "pencil")
+                    }
+                    Button {
+                        showingAddExpenseSheet = true
+                    } label: {
+                        Label("Add Expense", systemImage: "plus")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
+        .sheet(isPresented: $showingEditSheet) {
+            BudgetCategorySheet(category: category, onSave: { name, icon, colorName, planned in
+                category.name = name
+                category.icon = icon
+                category.colorName = colorName
+                category.plannedAmount = planned
+            })
+        }
+        .sheet(isPresented: $showingAddExpenseSheet) {
+            BudgetExpenseSheet(expense: nil, onSave: { note, amount, date, receiptImageData in
+                modelContext.insert(
+                    BudgetExpense(note: note, amount: amount, date: date, receiptImageData: receiptImageData, category: category)
+                )
+            })
+        }
+        .sheet(item: $editingExpense) { expense in
+            BudgetExpenseSheet(
+                expense: expense,
+                onSave: { note, amount, date, receiptImageData in
+                    expense.note = note
+                    expense.amount = amount
+                    expense.date = date
+                    expense.receiptImageData = receiptImageData
+                },
+                onDelete: {
+                    modelContext.delete(expense)
+                }
+            )
+        }
+    }
+
+    private var categorySummary: some View {
+        HStack {
+            summaryStat(title: "Planned", amount: category.plannedAmount)
+            Spacer()
+            summaryStat(title: "Spent", amount: category.totalSpent)
+            Spacer()
+            summaryStat(title: "Remaining", amount: category.plannedAmount - category.totalSpent)
+        }
+        .padding(20)
+        .background(
+            LinearGradient(colors: [category.color, .quinceGold], startPoint: .topLeading, endPoint: .bottomTrailing)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .shadow(color: category.color.opacity(0.35), radius: 10, y: 5)
+        .padding(.horizontal)
+    }
+
+    private func summaryStat(title: LocalizedStringKey, amount: Decimal) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.75))
+            Text(amount, format: .currency(code: "USD"))
+                .font(.subheadline.bold())
+                .foregroundStyle(.white)
+        }
+    }
+}
+
+// One expense row, showing its receipt thumbnail (or a placeholder if none
+// was attached), note, date, and amount.
+private struct BudgetExpenseRow: View {
+    let expense: BudgetExpense
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let data = expense.receiptImageData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.15))
+                    .frame(width: 44, height: 44)
+                    .overlay {
+                        Image(systemName: "receipt")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(expense.note)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                Text(expense.date, format: .dateTime.month().day().year())
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Text(expense.amount, format: .currency(code: "USD"))
+                .font(.subheadline.bold())
+                .foregroundStyle(.primary)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
 // The add/edit form for a single budget category. The same sheet handles
-// both cases: `category` is nil when adding (no Delete button shows), or
-// pre-filled when editing an existing one. `onSave` hands back plain values
-// rather than a whole model instance, since the caller decides whether that
-// means inserting a new persisted category or updating an existing one.
+// both cases: `category` is nil when adding, or pre-filled when editing an
+// existing one. `onSave` hands back plain values rather than a whole model
+// instance, since the caller decides whether that means inserting a new
+// persisted category or updating an existing one. Deleting a category
+// happens from its row in the list (long-press), not from this sheet.
 private struct BudgetCategorySheet: View {
     let category: BudgetCategory?
-    let onSave: (_ name: String, _ icon: String, _ colorName: String, _ plannedAmount: Decimal, _ actualAmount: Decimal) -> Void
-    var onDelete: (() -> Void)?
+    let onSave: (_ name: String, _ icon: String, _ colorName: String, _ plannedAmount: Decimal) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var icon: String
     @State private var colorName: String
     @State private var plannedAmount: Decimal
-    @State private var actualAmount: Decimal
 
     init(
         category: BudgetCategory?,
-        onSave: @escaping (_ name: String, _ icon: String, _ colorName: String, _ plannedAmount: Decimal, _ actualAmount: Decimal) -> Void,
-        onDelete: (() -> Void)? = nil
+        onSave: @escaping (_ name: String, _ icon: String, _ colorName: String, _ plannedAmount: Decimal) -> Void
     ) {
         self.category = category
         self.onSave = onSave
-        self.onDelete = onDelete
         _name = State(initialValue: category?.name ?? "")
         _icon = State(initialValue: category?.icon ?? budgetCategoryIcons[0])
         _colorName = State(initialValue: category?.colorName ?? budgetCategoryColorOptions[0].name)
         _plannedAmount = State(initialValue: category?.plannedAmount ?? 0)
-        _actualAmount = State(initialValue: category?.actualAmount ?? 0)
     }
 
     private var isValid: Bool {
@@ -353,32 +571,13 @@ private struct BudgetCategorySheet: View {
                     iconPicker
                     colorPicker
                 }
-                Section("Amounts") {
+                Section("Amount") {
                     HStack {
                         Text("Planned")
                         Spacer()
                         TextField("Planned", value: $plannedAmount, format: .currency(code: "USD"))
                             .keyboardType(.decimalPad)
                             .multilineTextAlignment(.trailing)
-                    }
-                    HStack {
-                        Text("Spent so far")
-                        Spacer()
-                        TextField("Spent", value: $actualAmount, format: .currency(code: "USD"))
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                    }
-                }
-
-                if let onDelete {
-                    Section {
-                        Button(role: .destructive) {
-                            onDelete()
-                            dismiss()
-                        } label: {
-                            Text("Delete Category")
-                                .frame(maxWidth: .infinity)
-                        }
                     }
                 }
             }
@@ -394,8 +593,7 @@ private struct BudgetCategorySheet: View {
                             name.trimmingCharacters(in: .whitespaces),
                             icon,
                             colorName,
-                            plannedAmount,
-                            actualAmount
+                            plannedAmount
                         )
                         dismiss()
                     }
@@ -451,5 +649,126 @@ private struct BudgetCategorySheet: View {
 
     private var colorForCurrentSelection: Color {
         budgetCategoryColorOptions.first { $0.name == colorName }?.color ?? .quinceMagenta
+    }
+}
+
+// The add/edit form for a single expense within a category — an amount,
+// a note, a date, and an optional receipt photo picked from the library.
+private struct BudgetExpenseSheet: View {
+    let expense: BudgetExpense?
+    let onSave: (_ note: String, _ amount: Decimal, _ date: Date, _ receiptImageData: Data?) -> Void
+    var onDelete: (() -> Void)?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var note: String
+    @State private var amount: Decimal
+    @State private var date: Date
+    @State private var receiptImageData: Data?
+    @State private var selectedPhoto: PhotosPickerItem?
+
+    init(
+        expense: BudgetExpense?,
+        onSave: @escaping (_ note: String, _ amount: Decimal, _ date: Date, _ receiptImageData: Data?) -> Void,
+        onDelete: (() -> Void)? = nil
+    ) {
+        self.expense = expense
+        self.onSave = onSave
+        self.onDelete = onDelete
+        _note = State(initialValue: expense?.note ?? "")
+        _amount = State(initialValue: expense?.amount ?? 0)
+        _date = State(initialValue: expense?.date ?? .now)
+        _receiptImageData = State(initialValue: expense?.receiptImageData)
+    }
+
+    private var isValid: Bool {
+        !note.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Expense") {
+                    TextField("Note", text: $note)
+                    DatePicker("Date", selection: $date, displayedComponents: .date)
+                    HStack {
+                        Text("Amount")
+                        Spacer()
+                        TextField("Amount", value: $amount, format: .currency(code: "USD"))
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+
+                Section("Receipt") {
+                    receiptPicker
+                }
+
+                if let onDelete {
+                    Section {
+                        Button(role: .destructive) {
+                            onDelete()
+                            dismiss()
+                        } label: {
+                            Text("Delete Expense")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(expense == nil ? "Add Expense" : "Edit Expense")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        onSave(
+                            note.trimmingCharacters(in: .whitespaces),
+                            amount,
+                            date,
+                            receiptImageData
+                        )
+                        dismiss()
+                    }
+                    .disabled(!isValid)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .onChange(of: selectedPhoto) { _, newValue in
+            guard let newValue else { return }
+            Task {
+                if let data = try? await newValue.loadTransferable(type: Data.self) {
+                    receiptImageData = downscaledJPEGData(from: data)
+                }
+            }
+        }
+    }
+
+    private var receiptPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let receiptImageData, let uiImage = UIImage(data: receiptImageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxHeight: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                Button(role: .destructive) {
+                    self.receiptImageData = nil
+                    selectedPhoto = nil
+                } label: {
+                    Text("Remove Receipt")
+                }
+            }
+
+            PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                Label(
+                    receiptImageData == nil ? "Add Receipt Photo" : "Replace Receipt Photo",
+                    systemImage: "photo.on.rectangle"
+                )
+            }
+        }
     }
 }
