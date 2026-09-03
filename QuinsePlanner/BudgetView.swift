@@ -244,35 +244,50 @@ struct BudgetView: View {
         .shadow(color: .quinceMagenta.opacity(0.35), radius: 10, y: 5)
     }
 
-    // A donut chart standing in for the old linear progress bar — same
-    // spent-vs-remaining story, laid out as two sectors around a ring with
-    // the percentage spent in the middle.
+    // A donut chart standing in for the old linear progress bar — one
+    // sector per category (in that category's own color) so it doubles as
+    // a spend breakdown, plus a remaining sector, with the percentage
+    // spent overall in the middle.
     private var spendDonut: some View {
         ZStack {
             Chart {
-                SectorMark(
-                    angle: .value("Spent", NSDecimalNumber(decimal: totalSpent).doubleValue),
-                    innerRadius: .ratio(0.7),
-                    angularInset: 1.5
-                )
-                .foregroundStyle(isOverBudget ? Color.red : Color.white)
-                .cornerRadius(3)
+                ForEach(categoriesWithSpend) { category in
+                    SectorMark(
+                        angle: .value(category.name, NSDecimalNumber(decimal: category.totalSpent).doubleValue),
+                        innerRadius: .ratio(0.7),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(category.color)
+                    .cornerRadius(3)
+                }
 
-                SectorMark(
-                    angle: .value("Remaining", max(0, NSDecimalNumber(decimal: totalBudget - totalSpent).doubleValue)),
-                    innerRadius: .ratio(0.7),
-                    angularInset: 1.5
-                )
-                .foregroundStyle(.white.opacity(0.25))
-                .cornerRadius(3)
+                if remainingBudget > 0 {
+                    SectorMark(
+                        angle: .value("Remaining", NSDecimalNumber(decimal: remainingBudget).doubleValue),
+                        innerRadius: .ratio(0.7),
+                        angularInset: 1.5
+                    )
+                    .foregroundStyle(.white.opacity(0.25))
+                    .cornerRadius(3)
+                }
             }
             .chartLegend(.hidden)
             .animation(.spring, value: spentFraction)
 
             Text(spentPercentageLabel)
                 .font(.caption.bold())
-                .foregroundStyle(.white)
+                .foregroundStyle(isOverBudget ? .red : .white)
         }
+    }
+
+    // Zero-spend categories are left out so the chart doesn't render
+    // degenerate slivers for money that hasn't been spent yet.
+    private var categoriesWithSpend: [BudgetCategory] {
+        categories.filter { $0.totalSpent > 0 }
+    }
+
+    private var remainingBudget: Decimal {
+        max(0, totalBudget - totalSpent)
     }
 
     private var spentPercentageLabel: String {
