@@ -30,7 +30,7 @@ There is no test target yet — `xcodebuild test` has nothing to run until one i
 
 ## Architecture
 
-- `QuinsePlannerApp.swift` — `@main` entry point, sets up the single `WindowGroup` scene rendering `ContentView`, and attaches the app's `.modelContainer(for: [...])` (every persisted `@Model` type is registered there).
+- `QuinsePlannerApp.swift` — `@main` entry point, sets up the single `WindowGroup` scene and attaches the app's `.modelContainer(for: [...])` (every persisted `@Model` type is registered there). The scene renders `RootView`, which briefly overlays a branded `SplashView` (advertising the Boutique) over `ContentView` on launch before fading it out — a code-only alternative to a static system launch screen, chosen because the splash needs real text/branding rather than just an image.
 - `ContentView.swift` — holds most of the app: the shared color palette, the home screen, and every section view still using in-memory state. It is organized with `// MARK:` comments into sections rather than split across files.
 - `BudgetView.swift`, `ChecklistView.swift` — sections split out into their own files when they moved to SwiftData persistence (see Persistence below). Sections that gain real persistence going forward should move out of `ContentView.swift` the same way rather than growing the monolith further.
 
