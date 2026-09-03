@@ -30,9 +30,9 @@ There is no test target yet — `xcodebuild test` has nothing to run until one i
 
 ## Architecture
 
-- `QuinsePlannerApp.swift` — `@main` entry point, sets up the single `WindowGroup` scene rendering `ContentView`, and attaches the app's `.modelContainer(for: BudgetCategory.self)`.
+- `QuinsePlannerApp.swift` — `@main` entry point, sets up the single `WindowGroup` scene rendering `ContentView`, and attaches the app's `.modelContainer(for: [...])` (every persisted `@Model` type is registered there).
 - `ContentView.swift` — holds most of the app: the shared color palette, the home screen, and every section view still using in-memory state. It is organized with `// MARK:` comments into sections rather than split across files.
-- `BudgetView.swift` — the Budget section, split out into its own file when it moved to SwiftData persistence (see Persistence below). Sections that gain real persistence going forward should move out of `ContentView.swift` the same way rather than growing the monolith further.
+- `BudgetView.swift`, `ChecklistView.swift` — sections split out into their own files when they moved to SwiftData persistence (see Persistence below). Sections that gain real persistence going forward should move out of `ContentView.swift` the same way rather than growing the monolith further.
 
 Navigation is a single `NavigationStack` declared in `ContentView` (the home screen). The home screen shows a grid of `MenuCard`s (one per app section); each card is a `NavigationLink` that pushes that section's view onto the stack. Sections not yet built out use a shared `ComingSoonView` placeholder so the home screen's cards don't need to change when a section is implemented for real — only its dedicated view (e.g. `GuestListView`) does.
 
@@ -40,7 +40,7 @@ Navigation is a single `NavigationStack` declared in `ContentView` (the home scr
 
 ## Persistence
 
-Persistence is being introduced section by section, starting with Budget — most sections (Guest List, Vendors, Court of Honor, Checklist) are still in-memory `@State` with no data/model layer beyond simple per-screen structs (e.g. `ChecklistItem`), and should follow the same pattern below as they're built out for real.
+Persistence is being introduced section by section — Budget and Checklist are done; the remaining sections (Guest List, Vendors, Court of Honor) are still in-memory `@State` with no data/model layer beyond simple per-screen structs, and should follow the same pattern below as they're built out for real.
 
 The established pattern, once a section needs real persistence:
 
@@ -50,11 +50,15 @@ The established pattern, once a section needs real persistence:
 - **A one-to-many relationship between records** (e.g. a category's individual `BudgetExpense`s) uses `@Relationship(deleteRule: .cascade, inverse: \Child.parent)` on the parent's array property — deleting the parent deletes its children with it. A derived total (like a category's spend) is a computed property summing the relationship rather than a separately-maintained stored field, so it can't drift out of sync with the underlying records.
 - **Binary data (e.g. a receipt photo)** is stored as `Data?` with `@Attribute(.externalStorage)`, which keeps large blobs out of the main SQLite row. Downscale/re-encode images (see `downscaledJPEGData` in `BudgetView.swift`) before persisting rather than storing picker originals as-is. Photos are picked with `PhotosPicker`/`PhotosPickerItem` (`PhotosUI`), which needs no Info.plist privacy key; camera capture would (there's no physical `Info.plist` in this project — privacy keys go in `project.pbxproj` as `INFOPLIST_KEY_*` build settings).
 - Every new `@Model` type must also be added to the container registration in `QuinsePlannerApp.swift` (`.modelContainer(for: [...])`), not just the one a view directly queries.
+- **A list with a meaningful order** (e.g. Checklist's planning sequence) needs an explicit stored `sortIndex: Int` and `@Query(sort: \Model.sortIndex)` — sorting by name/title (fine for Budget's free-form categories) would scramble a list that isn't alphabetical to begin with.
+- **Built-in copy that must stay localizable** (e.g. `ChecklistItem.title`, unlike user-typed data like a category name or a note) can't be stored as `LocalizedStringKey` — SwiftData can't persist that type. Store it as a plain `String` matching the original literal, then re-wrap it at the display site with `Text(LocalizedStringKey(item.title))` (or `Text(LocalizedStringKey(title))` for a title-only string like a nav title) so it still resolves through the string catalog instead of being displayed as a raw, unlocalized value.
 
 This project has no test target yet, so there's no automated coverage of persistence/migration behavior — worth keeping in mind if/when a schema needs to change after real user data exists. It already came up once: moving `BudgetCategory.actualAmount` from a stored property to a derived `totalSpent` (summed from expenses) meant old Simulator installs from before that change needed their app data reset rather than relying on migration to backfill the dropped value into a synthesized expense.
 
 ## Localization
 
-The app must support English and Spanish. SwiftUI only auto-localizes `Text`/`.navigationTitle`/`Button`/etc. when given a **string literal** (it resolves to a `LocalizedStringKey` overload) — not a precomputed `String` value. Reusable components that display fixed UI copy (`MenuCard`, `FeaturedCard`, `CategoryChip`, `ChecklistItem.title`) are therefore typed with `LocalizedStringKey` parameters, not `String`, so literals passed in at call sites stay localizable through to display. Keep this pattern for new UI-copy parameters. Actual data (product names/descriptions, phone/email) stays plain `String` — it isn't meant to be looked up in a translation table.
+The app must support English and Spanish. SwiftUI only auto-localizes `Text`/`.navigationTitle`/`Button`/etc. when given a **string literal** (it resolves to a `LocalizedStringKey` overload) — not a precomputed `String` value. Reusable components that display fixed UI copy (`MenuCard`, `FeaturedCard`, `CategoryChip`) are therefore typed with `LocalizedStringKey` parameters, not `String`, so literals passed in at call sites stay localizable through to display. Keep this pattern for new UI-copy parameters. Actual data (product names/descriptions, phone/email, a checklist item's user-typed note) stays plain `String` — it isn't meant to be looked up in a translation table.
+
+`ChecklistItem.title` is the one exception worth knowing about: it's fixed, built-in copy (like `MenuCard`'s), but since it's a SwiftData `@Model` property it has to be stored as a plain `String` (SwiftData can't persist `LocalizedStringKey`) rather than typed as `LocalizedStringKey` — see the Persistence section for how it's re-wrapped at display time so it still localizes.
 
 Translation infrastructure (a String Catalog resource + Spanish as a project localization) has not been added yet — it requires two Xcode UI steps (Project > Info > Localizations, and File > New > File > String Catalog) rather than direct `project.pbxproj` edits, to avoid corrupting the project file.
