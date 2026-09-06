@@ -20,6 +20,29 @@ enum GuestRSVPStatus: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+// Formats raw digits into a standard US "(XXX) XXX-XXXX" phone number as
+// the user types (or as a Contacts import is normalized), stripping any
+// non-digit characters, dropping a leading "1" country code if present,
+// and capping at 10 digits. Used by both GuestSheet's phone field and
+// Guest.fromContact below, so a guest's number looks the same whichever
+// way it was entered.
+private func formattedPhoneNumber(_ input: String) -> String {
+    var digits = input.filter(\.isNumber)
+    if digits.count == 11 && digits.first == "1" {
+        digits.removeFirst()
+    }
+    digits = String(digits.prefix(10))
+    guard !digits.isEmpty else { return "" }
+
+    var result = "("
+    for (index, digit) in digits.enumerated() {
+        if index == 3 { result += ") " }
+        if index == 6 { result += "-" }
+        result.append(digit)
+    }
+    return result
+}
+
 // A single guest on the list, with RSVP tracking and plus-one info. This is
 // a SwiftData model so the guest list survives app restarts.
 @Model
@@ -71,7 +94,7 @@ final class Guest {
         let name = formattedName?.trimmingCharacters(in: .whitespaces).isEmpty == false
             ? formattedName!
             : "Unnamed Guest"
-        let phone = contact.phoneNumbers.first?.value.stringValue ?? ""
+        let phone = formattedPhoneNumber(contact.phoneNumbers.first?.value.stringValue ?? "")
         let email = (contact.emailAddresses.first?.value).map { $0 as String } ?? ""
         return Guest(name: name, phone: phone, email: email)
     }
@@ -346,12 +369,23 @@ private struct GuestSheet: View {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
+    // Reformats into "(XXX) XXX-XXXX" on every keystroke rather than only
+    // at save time, so the field always shows a properly-formatted number
+    // (at the cost of the cursor jumping to the end after each edit, since
+    // this is a simple re-render rather than a cursor-aware text field).
+    private var phoneBinding: Binding<String> {
+        Binding(
+            get: { phone },
+            set: { phone = formattedPhoneNumber($0) }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("Guest") {
                     TextField("Name", text: $name)
-                    TextField("Phone", text: $phone)
+                    TextField("Phone", text: phoneBinding)
                         .keyboardType(.phonePad)
                     TextField("Email", text: $email)
                         .keyboardType(.emailAddress)
