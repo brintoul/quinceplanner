@@ -374,7 +374,10 @@ private struct GuestSheet: View {
             Form {
                 Section("Guest") {
                     TextField("Name", text: $name)
-                    PhoneNumberTextField(text: $phone, placeholder: "Phone")
+                    PhoneNumberTextField(
+                        text: $phone,
+                        placeholder: NSLocalizedString("Phone", comment: "A label for a phone number field.")
+                    )
                     TextField("Email", text: $email)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
@@ -439,6 +442,10 @@ private struct GuestSheet: View {
 // directly rather than using TextField + a custom Binding.
 private struct PhoneNumberTextField: UIViewRepresentable {
     @Binding var text: String
+    // Plain String, not LocalizedStringKey, since this sets a UIKit
+    // UITextField.placeholder directly rather than going through a
+    // SwiftUI Text — pass an NSLocalizedString(_:comment:) call at the
+    // call site to keep it picked up by the string catalog.
     var placeholder: String
 
     func makeUIView(context: Context) -> UITextField {
