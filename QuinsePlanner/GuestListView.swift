@@ -369,24 +369,12 @@ private struct GuestSheet: View {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    // Reformats into "(XXX) XXX-XXXX" on every keystroke rather than only
-    // at save time, so the field always shows a properly-formatted number
-    // (at the cost of the cursor jumping to the end after each edit, since
-    // this is a simple re-render rather than a cursor-aware text field).
-    private var phoneBinding: Binding<String> {
-        Binding(
-            get: { phone },
-            set: { phone = formattedPhoneNumber($0) }
-        )
-    }
-
     var body: some View {
         NavigationStack {
             Form {
                 Section("Guest") {
                     TextField("Name", text: $name)
-                    TextField("Phone", text: phoneBinding)
-                        .keyboardType(.phonePad)
+                    PhoneNumberTextField(text: $phone, placeholder: "Phone")
                     TextField("Email", text: $email)
                         .keyboardType(.emailAddress)
                         .textInputAutocapitalization(.never)
@@ -438,6 +426,57 @@ private struct GuestSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+// A phone number field that reformats into "(XXX) XXX-XXXX" live, as the
+// user types. A plain SwiftUI TextField can't do this: a Binding's setter
+// can transform the stored value, but the field's on-screen text (backed
+// by a real UITextField under the hood) only catches up once the field
+// loses focus, not while it's actively being typed into. Intercepting
+// edits via UITextFieldDelegate is what lets the displayed text and the
+// cursor position update together, live — hence wrapping UITextField
+// directly rather than using TextField + a custom Binding.
+private struct PhoneNumberTextField: UIViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField()
+        textField.placeholder = placeholder
+        textField.keyboardType = .phonePad
+        textField.delegate = context.coordinator
+        textField.addTarget(context.coordinator, action: #selector(Coordinator.textFieldDidChange), for: .editingChanged)
+        return textField
+    }
+
+    func updateUIView(_ uiView: UITextField, context: Context) {
+        if uiView.text != text {
+            uiView.text = text
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        let text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        @objc func textFieldDidChange(_ textField: UITextField) {
+            let formatted = formattedPhoneNumber(textField.text ?? "")
+            textField.text = formatted
+            text.wrappedValue = formatted
+            // The field is normally typed straight through rather than
+            // edited in the middle, so always landing the cursor at the
+            // end after reformatting is the simplest correct behavior.
+            let endPosition = textField.endOfDocument
+            textField.selectedTextRange = textField.textRange(from: endPosition, to: endPosition)
+        }
     }
 }
 
