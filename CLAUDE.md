@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-QuinsePlanner is an iOS app to help people plan a quinceañera party (guest list, budget, vendors, court of honor, timeline/checklist, etc.), built with SwiftUI (Xcode project, no SPM/CocoaPods dependencies), with a single `QuinsePlanner` app target and no test target yet. The visual style is intentionally colorful/image-rich (pink/magenta/gold theme, gradients, SF Symbols in colored badges) rather than plain system-default UI.
+QuincePlanner is an iOS app to help people plan a quinceañera party (guest list, budget, vendors, court of honor, timeline/checklist, etc.), built with SwiftUI (Xcode project, no SPM/CocoaPods dependencies), with a single `QuincePlanner` app target and no test target yet. The visual style is intentionally colorful/image-rich (pink/magenta/gold theme, gradients, SF Symbols in colored badges) rather than plain system-default UI.
 
 - Bundle ID: `com.liliscreations.QuinsePlanner`
 - Deployment target: iOS 26.5
@@ -13,24 +13,24 @@ QuinsePlanner is an iOS app to help people plan a quinceañera party (guest list
 
 ## Commands
 
-Build and run from Xcode (`QuinsePlanner.xcodeproj`) normally. From the command line:
+Build and run from Xcode (`QuincePlanner.xcodeproj`) normally. From the command line:
 
 ```bash
 # List available simulators/destinations
-xcodebuild -project QuinsePlanner.xcodeproj -scheme QuinsePlanner -showdestinations
+xcodebuild -project QuincePlanner.xcodeproj -scheme QuincePlanner -showdestinations
 
 # Build for a simulator
-xcodebuild -project QuinsePlanner.xcodeproj -scheme QuinsePlanner \
+xcodebuild -project QuincePlanner.xcodeproj -scheme QuincePlanner \
   -destination 'platform=iOS Simulator,name=iPhone 17' build
 ```
 
-Note: no `.xcscheme` is currently checked into the repo (only user-local scheme state exists), so `xcodebuild` may need `-scheme QuinsePlanner` to resolve automatically on first run, or a shared scheme may need to be created in Xcode (Product > Scheme > Manage Schemes > check "Shared") before CLI builds work reliably.
+Note: no `.xcscheme` is currently checked into the repo (only user-local scheme state exists), so `xcodebuild` may need `-scheme QuincePlanner` to resolve automatically on first run, or a shared scheme may need to be created in Xcode (Product > Scheme > Manage Schemes > check "Shared") before CLI builds work reliably.
 
 There is no test target yet — `xcodebuild test` has nothing to run until one is added.
 
 ## Architecture
 
-- `QuinsePlannerApp.swift` — `@main` entry point, sets up the single `WindowGroup` scene and attaches the app's `.modelContainer(for: [...])` (every persisted `@Model` type is registered there). The scene renders `RootView`, which briefly overlays a branded `SplashView` (advertising the Boutique) over `ContentView` on launch before fading it out — a code-only alternative to a static system launch screen, chosen because the splash needs real text/branding rather than just an image.
+- `QuincePlannerApp.swift` — `@main` entry point, sets up the single `WindowGroup` scene and attaches the app's `.modelContainer(for: [...])` (every persisted `@Model` type is registered there). The scene renders `RootView`, which briefly overlays a branded `SplashView` (advertising the Boutique) over `ContentView` on launch before fading it out — a code-only alternative to a static system launch screen, chosen because the splash needs real text/branding rather than just an image.
 - `ContentView.swift` — holds most of the app: the shared color palette, the home screen, and every section view still using in-memory state. It is organized with `// MARK:` comments into sections rather than split across files.
 - `BudgetView.swift`, `ChecklistView.swift`, `GuestListView.swift` — sections split out into their own files when they moved to SwiftData persistence (see Persistence below). Sections that gain real persistence going forward should move out of `ContentView.swift` the same way rather than growing the monolith further.
 
@@ -44,12 +44,12 @@ Persistence is being introduced section by section — Budget, Checklist, and Gu
 
 The established pattern, once a section needs real persistence:
 
-- **A collection of user-editable records** (e.g. `BudgetCategory`) becomes a SwiftData `@Model` class, registered on the app's model container in `QuinsePlannerApp.swift` (`.modelContainer(for:)`). The owning view reads it with `@Query` and mutates it through `@Environment(\.modelContext)` — insert for "add", mutate the model instance's properties in place for "edit" (SwiftData models are reference types, so this just works), `modelContext.delete(_:)` for "delete". First-launch sample data is seeded once, in a `.task` on the view, only if the query comes back empty — it's no longer baked into a static in-memory default.
+- **A collection of user-editable records** (e.g. `BudgetCategory`) becomes a SwiftData `@Model` class, registered on the app's model container in `QuincePlannerApp.swift` (`.modelContainer(for:)`). The owning view reads it with `@Query` and mutates it through `@Environment(\.modelContext)` — insert for "add", mutate the model instance's properties in place for "edit" (SwiftData models are reference types, so this just works), `modelContext.delete(_:)` for "delete". First-launch sample data is seeded once, in a `.task` on the view, only if the query comes back empty — it's no longer baked into a static in-memory default.
 - **A single scalar setting** (e.g. Budget's overall target amount) does *not* need its own SwiftData model just to hold one row — `@AppStorage` (backed by `UserDefaults`) is enough. `Decimal` has no native `AppStorage` support, so it's stored as a `Double` and converted at the view boundary (a computed `Binding<Decimal>`) — see `BudgetView.totalBudgetBinding`.
 - **`Color` isn't a SwiftData-storable type.** Where a model needs a color (as `BudgetCategory` does), store a `String` identifier (`colorName`) and map it back to the real `Color` via a computed property / lookup table, rather than trying to persist `Color` directly.
 - **A one-to-many relationship between records** (e.g. a category's individual `BudgetExpense`s) uses `@Relationship(deleteRule: .cascade, inverse: \Child.parent)` on the parent's array property — deleting the parent deletes its children with it. A derived total (like a category's spend) is a computed property summing the relationship rather than a separately-maintained stored field, so it can't drift out of sync with the underlying records.
 - **Binary data (e.g. a receipt photo)** is stored as `Data?` with `@Attribute(.externalStorage)`, which keeps large blobs out of the main SQLite row. Downscale/re-encode images (see `downscaledJPEGData` in `BudgetView.swift`) before persisting rather than storing picker originals as-is. Photos are picked with `PhotosPicker`/`PhotosPickerItem` (`PhotosUI`), which needs no Info.plist privacy key; camera capture would (there's no physical `Info.plist` in this project — privacy keys go in `project.pbxproj` as `INFOPLIST_KEY_*` build settings).
-- Every new `@Model` type must also be added to the container registration in `QuinsePlannerApp.swift` (`.modelContainer(for: [...])`), not just the one a view directly queries.
+- Every new `@Model` type must also be added to the container registration in `QuincePlannerApp.swift` (`.modelContainer(for: [...])`), not just the one a view directly queries.
 - **A list with a meaningful order** (e.g. Checklist's planning sequence) needs an explicit stored `sortIndex: Int` and `@Query(sort: \Model.sortIndex)` — sorting by name/title (fine for Budget's free-form categories) would scramble a list that isn't alphabetical to begin with.
 - **Built-in copy that must stay localizable** (e.g. `ChecklistItem.title`, unlike user-typed data like a category name or a note) can't be stored as `LocalizedStringKey` — SwiftData can't persist that type. Store it as a plain `String` matching the original literal, then re-wrap it at the display site with `Text(LocalizedStringKey(item.title))` (or `Text(LocalizedStringKey(title))` for a title-only string like a nav title) so it still resolves through the string catalog instead of being displayed as a raw, unlocalized value.
 - **An enum-valued field** (e.g. `Guest.rsvpStatus: GuestRSVPStatus`) can be stored directly as a model property as long as the enum is `Codable` (a `String`-raw-value enum gets this for free) — SwiftData persists `Codable` types natively. This is simpler than the `Color`/`colorName` workaround above, which is only needed because `Color` itself isn't `Codable`.

@@ -1,6 +1,6 @@
 //
 //  GuestListView.swift
-//  QuinsePlanner
+//  QuincePlanner
 //
 
 import SwiftUI

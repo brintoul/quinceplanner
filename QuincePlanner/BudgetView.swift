@@ -1,6 +1,6 @@
 //
 //  BudgetView.swift
-//  QuinsePlanner
+//  QuincePlanner
 //
 
 import SwiftUI

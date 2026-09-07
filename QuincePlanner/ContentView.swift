@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  QuinsePlanner
+//  QuincePlanner
 //
 //  Created by Bradley Rintoul on 8/28/26.
 //

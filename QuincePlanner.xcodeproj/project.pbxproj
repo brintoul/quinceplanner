@@ -7,13 +7,13 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		F53289073042047B009FD9E0 /* QuinsePlanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuinsePlanner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F53289073042047B009FD9E0 /* QuincePlanner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = QuincePlanner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		F53289093042047B009FD9E0 /* QuinsePlanner */ = {
+		F53289093042047B009FD9E0 /* QuincePlanner */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = QuinsePlanner;
+			path = QuincePlanner;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,7 +32,7 @@
 		F53288FE3042047B009FD9E0 = {
 			isa = PBXGroup;
 			children = (
-				F53289093042047B009FD9E0 /* QuinsePlanner */,
+				F53289093042047B009FD9E0 /* QuincePlanner */,
 				F53289083042047B009FD9E0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -40,7 +40,7 @@
 		F53289083042047B009FD9E0 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				F53289073042047B009FD9E0 /* QuinsePlanner.app */,
+				F53289073042047B009FD9E0 /* QuincePlanner.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +48,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		F53289063042047B009FD9E0 /* QuinsePlanner */ = {
+		F53289063042047B009FD9E0 /* QuincePlanner */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = F53289123042047D009FD9E0 /* Build configuration list for PBXNativeTarget "QuinsePlanner" */;
+			buildConfigurationList = F53289123042047D009FD9E0 /* Build configuration list for PBXNativeTarget "QuincePlanner" */;
 			buildPhases = (
 				F53289033042047B009FD9E0 /* Sources */,
 				F53289043042047B009FD9E0 /* Frameworks */,
@@ -61,13 +61,13 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				F53289093042047B009FD9E0 /* QuinsePlanner */,
+				F53289093042047B009FD9E0 /* QuincePlanner */,
 			);
-			name = QuinsePlanner;
+			name = QuincePlanner;
 			packageProductDependencies = (
 			);
-			productName = QuinsePlanner;
-			productReference = F53289073042047B009FD9E0 /* QuinsePlanner.app */;
+			productName = QuincePlanner;
+			productReference = F53289073042047B009FD9E0 /* QuincePlanner.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -85,7 +85,7 @@
 					};
 				};
 			};
-			buildConfigurationList = F53289023042047B009FD9E0 /* Build configuration list for PBXProject "QuinsePlanner" */;
+			buildConfigurationList = F53289023042047B009FD9E0 /* Build configuration list for PBXProject "QuincePlanner" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -100,7 +100,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				F53289063042047B009FD9E0 /* QuinsePlanner */,
+				F53289063042047B009FD9E0 /* QuincePlanner */,
 			);
 		};
 /* End PBXProject section */
@@ -316,7 +316,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		F53289023042047B009FD9E0 /* Build configuration list for PBXProject "QuinsePlanner" */ = {
+		F53289023042047B009FD9E0 /* Build configuration list for PBXProject "QuincePlanner" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				F53289103042047D009FD9E0 /* Debug */,
@@ -325,7 +325,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		F53289123042047D009FD9E0 /* Build configuration list for PBXNativeTarget "QuinsePlanner" */ = {
+		F53289123042047D009FD9E0 /* Build configuration list for PBXNativeTarget "QuincePlanner" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				F53289133042047D009FD9E0 /* Debug */,

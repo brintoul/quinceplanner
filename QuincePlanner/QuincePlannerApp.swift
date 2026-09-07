@@ -1,6 +1,6 @@
 //
-//  QuinsePlannerApp.swift
-//  QuinsePlanner
+//  QuincePlannerApp.swift
+//  QuincePlanner
 //
 //  Created by Bradley Rintoul on 8/28/26.
 //
@@ -9,7 +9,7 @@ import SwiftUI
 import SwiftData
 
 @main
-struct QuinsePlannerApp: App {
+struct QuincePlannerApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()

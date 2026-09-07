@@ -1,6 +1,6 @@
 //
 //  ChecklistView.swift
-//  QuinsePlanner
+//  QuincePlanner
 //
 
 import SwiftUI

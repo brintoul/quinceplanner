@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "F53289063042047B009FD9E0"
-               BuildableName = "QuinsePlanner.app"
-               BlueprintName = "QuinsePlanner"
-               ReferencedContainer = "container:QuinsePlanner.xcodeproj">
+               BuildableName = "QuincePlanner.app"
+               BlueprintName = "QuincePlanner"
+               ReferencedContainer = "container:QuincePlanner.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,9 +46,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F53289063042047B009FD9E0"
-            BuildableName = "QuinsePlanner.app"
-            BlueprintName = "QuinsePlanner"
-            ReferencedContainer = "container:QuinsePlanner.xcodeproj">
+            BuildableName = "QuincePlanner.app"
+            BlueprintName = "QuincePlanner"
+            ReferencedContainer = "container:QuincePlanner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -63,9 +63,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "F53289063042047B009FD9E0"
-            BuildableName = "QuinsePlanner.app"
-            BlueprintName = "QuinsePlanner"
-            ReferencedContainer = "container:QuinsePlanner.xcodeproj">
+            BuildableName = "QuincePlanner.app"
+            BlueprintName = "QuincePlanner"
+            ReferencedContainer = "container:QuincePlanner.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
