@@ -31,6 +31,13 @@ extension ShapeStyle where Self == Color {
 struct ContentView: View {
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
+    // Set by the onboarding wizard (OnboardingView.swift) — used to
+    // personalize the header below. Left blank/unset if the user skipped
+    // those steps, in which case the header falls back to generic copy.
+    @AppStorage("quinceaneraName") private var quinceaneraName: String = ""
+    @AppStorage("hasSetPartyDate") private var hasSetPartyDate = false
+    @AppStorage("partyDateValue") private var partyDateValue: Double = Date().timeIntervalSinceReferenceDate
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -91,11 +98,49 @@ struct ContentView: View {
                     .font(.system(size: 36))
                     .foregroundStyle(.white)
             }
-            Text("Let's plan your celebration")
+            headerSubtitle
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
         .padding(.top, 8)
+    }
+
+    // Personalizes the header once the onboarding wizard (OnboardingView.swift)
+    // has collected a name and/or date — falls back to the generic greeting
+    // for anyone who skipped those steps. Each branch is its own Text literal
+    // (rather than a precomputed String) so it stays localizable.
+    @ViewBuilder
+    private var headerSubtitle: some View {
+        if let days = daysUntilParty, days >= 0 {
+            if !quinceaneraName.isEmpty {
+                if days == 0 {
+                    Text("\(quinceaneraName)'s celebration is today!")
+                } else if days == 1 {
+                    Text("\(quinceaneraName)'s celebration is tomorrow!")
+                } else {
+                    Text("\(quinceaneraName)'s celebration is in \(days) days")
+                }
+            } else if days == 0 {
+                Text("The celebration is today!")
+            } else if days == 1 {
+                Text("1 day until the celebration")
+            } else {
+                Text("\(days) days until the celebration")
+            }
+        } else if !quinceaneraName.isEmpty {
+            Text("Let's plan \(quinceaneraName)'s celebration")
+        } else {
+            Text("Let's plan your celebration")
+        }
+    }
+
+    private var daysUntilParty: Int? {
+        guard hasSetPartyDate else { return nil }
+        let calendar = Calendar.current
+        let startOfToday = calendar.startOfDay(for: .now)
+        let startOfParty = calendar.startOfDay(for: Date(timeIntervalSinceReferenceDate: partyDateValue))
+        return calendar.dateComponents([.day], from: startOfToday, to: startOfParty).day
     }
 }
 

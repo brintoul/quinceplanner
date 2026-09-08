@@ -18,16 +18,22 @@ struct QuincePlannerApp: App {
     }
 }
 
-// Shows a branded splash screen over ContentView for a moment on launch,
-// then fades it out — a lightweight, code-only alternative to a static
-// system launch screen, since this needs real text/branding rather than
-// just a launch image.
+// Shows a branded splash screen for a moment on launch, then fades it out —
+// a lightweight, code-only alternative to a static system launch screen,
+// since this needs real text/branding rather than just a launch image.
+// Underneath, first-time users see the onboarding wizard instead of the
+// home screen until they finish or skip it (OnboardingView.swift).
 private struct RootView: View {
     @State private var isShowingSplash = true
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
         ZStack {
-            ContentView()
+            if hasCompletedOnboarding {
+                ContentView()
+            } else {
+                OnboardingView()
+            }
             if isShowingSplash {
                 SplashView()
                     .transition(.opacity)
