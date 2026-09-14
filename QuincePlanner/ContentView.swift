@@ -274,6 +274,7 @@ struct Product: Identifiable {
 struct BoutiqueView: View {
     private let products = Product.samples
     @State private var selectedCategory: ProductCategory?
+    @State private var showingContactSheet = false
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
     private var filteredProducts: [Product] {
@@ -293,6 +294,7 @@ struct BoutiqueView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     boutiqueHeader
+                    contactCard
                     categoryPicker
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(filteredProducts) { product in
@@ -305,6 +307,46 @@ struct BoutiqueView: View {
         }
         .navigationTitle("The Boutique")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showingContactSheet) {
+            InquireSheet(product: nil)
+        }
+    }
+
+    // A general contact entry point, separate from a specific product's
+    // "Inquire" button below — for someone who just wants to call before
+    // browsing, without picking an item first.
+    private var contactCard: some View {
+        Button {
+            showingContactSheet = true
+        } label: {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(.white.opacity(0.25))
+                        .frame(width: 48, height: 48)
+                    Image(systemName: "phone.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Contact Us")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text("Questions about sizing or a fitting?")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+            .padding(16)
+            .background(
+                LinearGradient(colors: [.quinceMagenta, .quinceGold], startPoint: .leading, endPoint: .trailing)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
     }
 
     private var boutiqueHeader: some View {
@@ -468,25 +510,36 @@ struct ProductDetailView: View {
     }
 }
 
-// Tapping "Inquire" shows this as a sheet (a card that slides up over the
-// current screen) with ways to contact the store about a specific item.
+// Shown as a sheet (a card that slides up over the current screen) with
+// ways to contact the store — either about a specific item (tapping
+// "Inquire" on that item's detail screen) or generally (the Boutique's
+// "Contact Us" card), in which case `product` is nil and the copy/accent
+// color fall back to something generic.
 private struct InquireSheet: View {
-    let product: Product
+    let product: Product?
     @Environment(\.dismiss) private var dismiss
 
-    // TODO: replace with the boutique's real phone number and email.
-    private let storePhone = "+1-555-0100"
+    private let storePhone = "619-764-9620"
+    // TODO: replace with the boutique's real email.
     private let storeEmail = "hello@yourboutique.example"
+
+    private var accentColor: Color { product?.color ?? .quinceMagenta }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
                 Image(systemName: "envelope.badge.fill")
                     .font(.system(size: 48))
-                    .foregroundStyle(product.color)
-                Text("Interested in \(product.name)?")
-                    .font(.title3.bold())
-                    .multilineTextAlignment(.center)
+                    .foregroundStyle(accentColor)
+                if let product {
+                    Text("Interested in \(product.name)?")
+                        .font(.title3.bold())
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("Have a question?")
+                        .font(.title3.bold())
+                        .multilineTextAlignment(.center)
+                }
                 Text("Reach out to Lily's Creations and we'll help with sizing, availability, and scheduling a fitting.")
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -500,7 +553,7 @@ private struct InquireSheet: View {
                     }
                 }
                 .font(.headline)
-                .foregroundStyle(product.color)
+                .foregroundStyle(accentColor)
 
                 Spacer()
             }
