@@ -7,14 +7,36 @@
 
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 @main
 struct QuincePlannerApp: App {
+    init() {
+        UNUserNotificationCenter.current().delegate = NotificationDelegate.shared
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
         }
         .modelContainer(for: [BudgetCategory.self, BudgetExpense.self, ChecklistItem.self, ChecklistNote.self, Guest.self])
+    }
+}
+
+// UNUserNotificationCenter suppresses a notification's banner/sound by
+// default whenever the app is in the foreground when it fires. Without
+// this delegate, a checklist reminder (see ReminderScheduler in
+// ChecklistView.swift) would silently do nothing if the app happened to be
+// open at the scheduled time.
+private final class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = NotificationDelegate()
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound, .badge])
     }
 }
 
