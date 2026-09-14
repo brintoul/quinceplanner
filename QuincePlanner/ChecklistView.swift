@@ -5,6 +5,7 @@
 
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 // A single to-do item on the planning checklist. Each item carries an SF
 // Symbol name and a color so the row can render as a little colorful card.
@@ -27,18 +28,22 @@ final class ChecklistItem {
     // would scramble it, since this isn't an alphabetical list.
     var sortIndex: Int
     var isDone: Bool
+    // Unlike colorName, Date is natively SwiftData-storable, so no
+    // string-workaround is needed here. nil means no reminder is set.
+    var reminderDate: Date?
 
     // Cascade so deleting an item takes its notes with it.
     @Relationship(deleteRule: .cascade, inverse: \ChecklistNote.item)
     var notes: [ChecklistNote] = []
 
-    init(id: UUID = UUID(), title: String, icon: String, colorName: String, sortIndex: Int, isDone: Bool = false) {
+    init(id: UUID = UUID(), title: String, icon: String, colorName: String, sortIndex: Int, isDone: Bool = false, reminderDate: Date? = nil) {
         self.id = id
         self.title = title
         self.icon = icon
         self.colorName = colorName
         self.sortIndex = sortIndex
         self.isDone = isDone
+        self.reminderDate = reminderDate
     }
 
     var color: Color {
@@ -153,12 +158,19 @@ struct ChecklistView: View {
 private struct ChecklistRow: View {
     let item: ChecklistItem
     @State private var showingNoteSheet = false
+    @State private var showingReminderSheet = false
 
     var body: some View {
         HStack(spacing: 10) {
             Button {
                 withAnimation(.spring) {
                     item.isDone.toggle()
+                }
+                // No point alerting about a task that's already finished.
+                // reminderDate itself is left in place in case it gets
+                // un-checked later.
+                if item.isDone, item.reminderDate != nil {
+                    ReminderScheduler.cancel(for: item)
                 }
             } label: {
                 HStack(spacing: 14) {
@@ -183,6 +195,12 @@ private struct ChecklistRow: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
+
+                        if let reminderPreview = item.reminderPreview {
+                            Label(reminderPreview, systemImage: "bell.fill")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Spacer(minLength: 0)
@@ -191,6 +209,15 @@ private struct ChecklistRow: View {
                         .foregroundStyle(item.isDone ? .green : .secondary.opacity(0.5))
                         .font(.title3)
                 }
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                showingReminderSheet = true
+            } label: {
+                Image(systemName: item.reminderDate == nil ? "bell" : "bell.fill")
+                    .font(.title3)
+                    .foregroundStyle(item.reminderDate == nil ? .secondary : item.color)
             }
             .buttonStyle(.plain)
 
@@ -210,6 +237,9 @@ private struct ChecklistRow: View {
         .sheet(isPresented: $showingNoteSheet) {
             ChecklistNotesSheet(item: item)
         }
+        .sheet(isPresented: $showingReminderSheet) {
+            ReminderSheet(item: item)
+        }
     }
 }
 
@@ -223,6 +253,51 @@ private extension ChecklistItem {
             return "\(notes.count) notes"
         }
         return nil
+    }
+
+    var reminderPreview: String? {
+        guard let reminderDate else { return nil }
+        return reminderDate.formatted(date: .abbreviated, time: .shortened)
+    }
+}
+
+// Wraps UNUserNotificationCenter for scheduling/cancelling a single
+// reminder per checklist item. Reusing the item's own id as the request
+// identifier means re-scheduling (editing a reminder) simply replaces the
+// pending request — no separate notification-id field needed on the model.
+enum ReminderScheduler {
+    static func requestAuthorizationIfNeeded(completion: @escaping (Bool) -> Void) {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            switch settings.authorizationStatus {
+            case .authorized, .provisional:
+                completion(true)
+            case .notDetermined:
+                center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                    completion(granted)
+                }
+            default:
+                completion(false)
+            }
+        }
+    }
+
+    static func schedule(for item: ChecklistItem) {
+        guard let reminderDate = item.reminderDate else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "Quince Planner"
+        content.body = NSLocalizedString(item.title, comment: "Checklist item title, used as a reminder notification's body")
+        content.sound = .default
+
+        let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let request = UNNotificationRequest(identifier: item.id.uuidString, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    static func cancel(for item: ChecklistItem) {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [item.id.uuidString])
     }
 }
 
@@ -285,5 +360,108 @@ private struct ChecklistNotesSheet: View {
         guard !trimmed.isEmpty else { return }
         modelContext.insert(ChecklistNote(text: trimmed, item: item))
         newNoteText = ""
+    }
+}
+
+// Lets the user set (or remove) a reminder on a checklist item, either as a
+// specific date/time or as a number of days from now. Mutates item directly
+// like ChecklistNotesSheet does — SwiftData models are observable, so no
+// @Bindable is needed for the change to show up back in ChecklistRow.
+private struct ReminderSheet: View {
+    let item: ChecklistItem
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var mode: Mode = .onDate
+    @State private var specificDate: Date
+    @State private var daysFromNow = 3
+    @State private var showingPermissionAlert = false
+
+    private enum Mode: Hashable {
+        case onDate, inDays
+    }
+
+    init(item: ChecklistItem) {
+        self.item = item
+        _specificDate = State(initialValue: item.reminderDate ?? Calendar.current.date(byAdding: .day, value: 1, to: .now) ?? .now)
+    }
+
+    private var resolvedDate: Date {
+        switch mode {
+        case .onDate:
+            return specificDate
+        case .inDays:
+            return Calendar.current.date(byAdding: .day, value: daysFromNow, to: .now) ?? .now
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Picker("Remind me", selection: $mode) {
+                        Text("On a date").tag(Mode.onDate)
+                        Text("After some days").tag(Mode.inDays)
+                    }
+                    .pickerStyle(.segmented)
+
+                    if mode == .onDate {
+                        DatePicker("Date & Time", selection: $specificDate, in: Date.now..., displayedComponents: [.date, .hourAndMinute])
+                    } else {
+                        Stepper(value: $daysFromNow, in: 1...365) {
+                            if daysFromNow == 1 {
+                                Text("In 1 day")
+                            } else {
+                                Text("In \(daysFromNow) days")
+                            }
+                        }
+                    }
+                }
+
+                if item.reminderDate != nil {
+                    Section {
+                        Button("Remove Reminder", role: .destructive) {
+                            removeReminder()
+                        }
+                    }
+                }
+            }
+            .navigationTitle(Text(LocalizedStringKey(item.title)))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { saveReminder() }
+                }
+            }
+            .alert("Notifications Disabled", isPresented: $showingPermissionAlert) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Enable notifications for Quince Planner in Settings to get reminder alerts.")
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func saveReminder() {
+        let date = resolvedDate
+        ReminderScheduler.requestAuthorizationIfNeeded { granted in
+            DispatchQueue.main.async {
+                guard granted else {
+                    showingPermissionAlert = true
+                    return
+                }
+                item.reminderDate = date
+                ReminderScheduler.schedule(for: item)
+                dismiss()
+            }
+        }
+    }
+
+    private func removeReminder() {
+        ReminderScheduler.cancel(for: item)
+        item.reminderDate = nil
+        dismiss()
     }
 }
